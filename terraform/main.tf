@@ -52,7 +52,7 @@ resource "aws_security_group" "app_sg" {
 resource "aws_instance" "app_server" {
   ami           = "ami-0ec10929233384c7f"
   instance_type = "t3.micro"
-  key_name      = "YOUR_KEY_PAIR_NAME"
+  key_name      = "aupp"
 
   vpc_security_group_ids = [aws_security_group.app_sg.id]
 
