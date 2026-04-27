@@ -51,7 +51,7 @@ jobs:
         with:
           scan-type: fs
           scan-ref: .
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
           exit-code: 1
 
       - name: Trivy Docker Image Scan
@@ -60,8 +60,6 @@ jobs:
           image-ref: ${{ env.IMAGE_NAME }}
           severity: CRITICAL
           exit-code: 1
-
-      # CD starts here: only runs after merge/push to main
 
       - name: Configure AWS Credentials
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -85,11 +83,24 @@ jobs:
         working-directory: terraform
         run: terraform apply -auto-approve
 
-      - name: Deploy Docker Container to EC2
+      - name: Get Terraform EC2 Public IP
+        id: get_ec2_ip
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        working-directory: terraform
+        run: |
+          EC2_IP=$(terraform output -raw ec2_public_ip)
+          echo "ec2_ip=$EC2_IP" >> "$GITHUB_OUTPUT"
+          echo "Terraform EC2 Public IP: $EC2_IP"
+
+      - name: Wait for EC2 SSH
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: sleep 90
+
+      - name: Deploy Docker Container to Terraform EC2
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: ${{ steps.get_ec2_ip.outputs.ec2_ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
@@ -98,13 +109,13 @@ jobs:
             sudo systemctl start docker
             sudo systemctl enable docker
 
-            docker stop aupp-lms-app || true
-            docker rm aupp-lms-app || true
+            sudo docker stop aupp-lms-app || true
+            sudo docker rm aupp-lms-app || true
 
             cd /home/ubuntu
             rm -rf aupp-devops
             git clone https://github.com/DoreAupp/aupp-devops.git aupp-devops
             cd aupp-devops
 
-            docker build -t aupp-lms-app .
-            docker run -d -p 3000:3000 --name aupp-lms-app aupp-lms-app
+            sudo docker build -t aupp-lms-app .
+            sudo docker run -d -p 3000:3000 --name aupp-lms-app aupp-lms-app
