@@ -61,8 +61,6 @@ jobs:
           severity: CRITICAL
           exit-code: 1
 
-      # CD only runs after merge/push to main
-
       - name: Configure AWS Credentials
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: aws-actions/configure-aws-credentials@v4
@@ -86,22 +84,23 @@ jobs:
         run: terraform apply -auto-approve
 
       - name: Get Terraform EC2 Public IP
+        id: get_ec2_ip
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         working-directory: terraform
         run: |
           EC2_IP=$(terraform output -raw ec2_public_ip)
-          echo "EC2_IP=$EC2_IP" >> $GITHUB_ENV
+          echo "ec2_ip=$EC2_IP" >> "$GITHUB_OUTPUT"
           echo "Terraform EC2 Public IP: $EC2_IP"
 
       - name: Wait for EC2 SSH
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        run: sleep 60
+        run: sleep 90
 
       - name: Deploy Docker Container to Terraform EC2
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ env.EC2_IP }}
+          host: ${{ steps.get_ec2_ip.outputs.ec2_ip }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
